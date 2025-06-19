@@ -1,82 +1,75 @@
-async function processTasksWithDynamicConcurrency(taskList, getConcurrency) {
-  const results = [];
-  let currentIndex = 0;
-  let activeTasks = 0;
-  let resolveAll;
-  let rejectAll;
-
-  const allDone = new Promise((resolve, reject) => {
-    resolveAll = resolve;
-    rejectAll = reject;
-  });
-
-  function logConcurrency() {
-    console.log(`[Concurrency: ${activeTasks}/${getConcurrency()}]`);
-  }
-
-  async function processNext() {
-    if (currentIndex >= taskList.length && activeTasks === 0) {
-      resolveAll();
-      return;
-    }
-
-    while (activeTasks < getConcurrency() && currentIndex < taskList.length) {
-      const taskIndex = currentIndex++;
-      const task = taskList[taskIndex];
-
-      activeTasks++;
-      logConcurrency();
-      try {
-        const result = await task();
-        results[taskIndex] = result;
-      } catch (error) {
-        rejectAll(error);
-        return;
-      } finally {
-        activeTasks--;
-        logConcurrency();
-      }
-
-      processNext();
-    }
-  }
-
-  processNext();
-
-  await allDone;
-  return results;
+function RandomTaskList(getConcurrency) {
+const taskList = [];
+for (let i = 0; i < getConcurrency; i++) {
+const task = {
+id: i,
+name: `Task ${i}`,
+duration: Math.floor(Math.random() * 3000) + 1000,
+status: "pending",
+};
+taskList.push(task);
+}
+return taskList;
 }
 
-async function init() {
-  const numberOfTasks = 20;
-  const taskList = [...Array(numberOfTasks)].map((_, i) => {
-    const taskName = [...Array(~~(Math.random() * 10 + 3))]
-      .map(() => String.fromCharCode(Math.random() * (123 - 97) + 97))
-      .join('');
-    
-    return async () => {
-      console.log(`Starting task ${i}: ${taskName}`);
-      await new Promise(resolve => 
-        setTimeout(resolve, Math.random() * 2000 + 500)
-      );
-      console.log(`Finished task ${i}: ${taskName}`);
-      return `Result of ${taskName}`;
-    };
-  });
+async function DConcurrency(taskList, getConcurrency) {
+let currentIndex = 0;
+let activeTasks = 0;
+const results = [];
 
-  function getCurrentConcurrency() {
-    const now = new Date();
-    const hours = now.getHours();
-    return (hours >= 9 && hours < 17) ? 3 : 10;
-  }
-
-  console.log('Starting task processing...');
-  console.log(`Initial concurrency limit: ${getCurrentConcurrency()}`);
-  const results = await processTasksWithDynamicConcurrency(
-    taskList,
-    getCurrentConcurrency
-  );
-  console.log('All tasks completed:', results);
+return new Promise((resolveAll, rejectAll) => {
+function logConcurrency() {
+console.log("Current Concurrency:", activeTasks);
 }
 
-init().catch(console.error);
+function runNext() {
+if (currentIndex >= taskList.length && activeTasks === 0) {
+resolveAll(results);
+return;
+}
+
+while (activeTasks < getConcurrency && currentIndex < taskList.length) {
+const task = taskList[currentIndex];
+const taskId = currentIndex;
+currentIndex++;
+activeTasks++;
+logConcurrency();
+
+try {
+new Promise((resolve) => {
+setTimeout(() => {
+task.status = "done";
+console.log(`${task.name} completed in ${task.duration}ms`);
+resolve(task);
+}, task.duration);
+})
+.then((result) => {
+results[taskId] = result;
+})
+.catch((err) => {
+results[taskId] = { error: err.message };
+})
+.finally(() => {
+activeTasks--;
+logConcurrency();
+runNext();
+});
+} catch (error) {
+console.error("Unexpected error:", error);
+activeTasks--;
+runNext();
+}
+}
+}
+
+runNext();
+});
+}
+
+const getConcurrency = 3;
+const taskList = RandomTaskList(10);
+
+DConcurrency(taskList, getConcurrency).then((results) => {
+console.log("All tasks completed");
+console.log(results);
+});
